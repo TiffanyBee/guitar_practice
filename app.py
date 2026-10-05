@@ -1,6 +1,9 @@
 import streamlit as st
 import time
 import datetime
+import pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # Classes
 class PracticeSession: 
@@ -9,6 +12,7 @@ class PracticeSession:
         self.date = date
         self.index = index
         self.songs = songs
+        self.total_songs = len(songs)
 class Song:
     def __init__(self, name, duration, start):
         self.name = name
@@ -23,6 +27,8 @@ def init_state():
 
     st.session_state.setdefault("practice_sessions", [])
     st.session_state.setdefault("songs", [])
+
+    st.session_state.setdefault("sessions_df", pd.DataFrame())
 
 init_state()
 
@@ -64,7 +70,8 @@ def add_song(name):
     st.session_state.songs.append(Song(name, 0, current_elapsed()))
 def save_session():
     songs = st.session_state.songs
-    index = len(songs) + 1
+    practice_sessions = st.session_state.practice_sessions
+    index = len(practice_sessions) + 1
     st.session_state.practice_sessions.append(
         PracticeSession(
             length=current_elapsed(), 
@@ -75,6 +82,7 @@ def save_session():
     )
     st.session_state.songs = []
     reset_stopwatch()
+    update_dataframe()
 
 
 #  UI
@@ -117,9 +125,26 @@ def render_song_list():
 def render_history():
     st.subheader("History")
     for session in reversed(st.session_state.practice_sessions):
-        with st.expander(f"Session {session.index} ({session.date}): {format_time(session.length)}"):
+        with st.expander(f"Session {session.index} ({session.date}): {format_time(session.length)} ({session.total_songs} songs)"):
             for song in session.songs:
                 st.write(f"{song.name}: {format_time(song.duration)}")
+
+
+## Stats
+def update_dataframe():
+    practice_sessions = st.session_state.practice_sessions
+    st.session_state.sessions_df = pd.DataFrame([vars(s) for s in practice_sessions])
+    display_weekly_practice()
+    display_dataframe()
+
+def display_dataframe():
+    st.subheader("Statistics")
+    st.write(st.session_state.sessions_df)
+def display_weekly_practice():
+    sessions = st.session_state.sessions_df
+    st.bar_chart(data=sessions, x="date", y="length")
+
+
 
 
 # ---------- Main ----------
@@ -131,5 +156,4 @@ render_add_song_form()
 render_song_list()
 st.button("Save Session", on_click=save_session)
 render_history()
-
 
