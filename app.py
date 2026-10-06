@@ -4,7 +4,7 @@ import datetime
 import pandas as pd
 import matplotlib.pyplot as plt
 import seaborn as sns
-
+import db
 # Classes
 class PracticeSession: 
     def __init__(self, length, date, index, songs):
@@ -20,17 +20,35 @@ class Song:
         self.start = start
 
 # State
+def load_db():
+    sessions = []
+    for row in db.load_sessions():
+        songs = [Song(name, duration, 0) for name, duration in row["songs"]]
+        sessions.append(
+            PracticeSession(
+                length=row["length"],
+                date=row["date"],
+                index=len(sessions) + 1,
+                songs=songs,
+            )
+        )
+    return sessions
+
+
 def init_state():
     st.session_state.setdefault("running", False)
     st.session_state.setdefault("start_time", 0.0)
     st.session_state.setdefault("elapsed", 0.0)
 
     st.session_state.setdefault("practice_sessions", [])
-    st.session_state.setdefault("songs", [])
+    st.session_state.practice_sessions = load_db()
+    st.session_state.setdefault("current_songs", [])
 
     st.session_state.setdefault("sessions_df", pd.DataFrame())
+    st.session_state.setdefault("songs_df", pd.DataFrame())
 
 init_state()
+
 
 # State: accumulated time, whether it's running, and when the current run began
 
@@ -61,28 +79,44 @@ def reset_stopwatch():
 
 # song/session updates
 def close_current_song():
-    songs = st.session_state.songs
+    songs = st.session_state.current_songs
     if songs:
         songs[-1].duration = current_elapsed() - songs[-1].start
 
 def add_song(name):
     close_current_song()
-    st.session_state.songs.append(Song(name, 0, current_elapsed()))
+    st.session_state.current_songs.append(Song(name, 0, current_elapsed()))
+
 def save_session():
-    songs = st.session_state.songs
+    close_current_song()
+    songs = st.session_state.current_songs
     practice_sessions = st.session_state.practice_sessions
     index = len(practice_sessions) + 1
+    length = current_elapsed()
+    
+    db.save_session(
+        date = datetime.date.today(),
+        length = length,
+        songs = [(s.name, s.duration) for s in songs]
+    )
+
+    st.session_state.practice_sessions = load_db()
+
+    _ = """
     st.session_state.practice_sessions.append(
         PracticeSession(
-            length=current_elapsed(), 
+            length=length, 
             date=datetime.date.today(),
             index=index,
             songs=songs
         )
     )
-    st.session_state.songs = []
+    """
+    #songs_df = st.sessions_state.songs_df
+    #current_songs_df = pd.DataFrame([vars(s) for s in songs])
+    #st.sessions_state.songs_df = pd.concat([songs_df, current_songs_df], ignore_index=True])
+    st.session_state.current_songs = []
     reset_stopwatch()
-    update_dataframe()
 
 
 #  UI
@@ -115,7 +149,7 @@ def render_add_song_form():
 
 @st.fragment(run_every=refresh_rate())
 def render_song_list():
-    songs = st.session_state.songs
+    songs = st.session_state.current_songs
     for i, song in enumerate(songs):
         is_current = i == len(songs) - 1
         seconds = current_elapsed() - song.start if is_current else song.duration
@@ -129,8 +163,11 @@ def render_history():
             for song in session.songs:
                 st.write(f"{song.name}: {format_time(song.duration)}")
 
+    
+
 
 ## Stats
+_ = """
 def update_dataframe():
     practice_sessions = st.session_state.practice_sessions
     st.session_state.sessions_df = pd.DataFrame([vars(s) for s in practice_sessions])
@@ -143,6 +180,14 @@ def display_dataframe():
 def display_weekly_practice():
     sessions = st.session_state.sessions_df
     st.bar_chart(data=sessions, x="date", y="length")
+def session_length_overtime():
+    sessions = st.session_state.sessions_df
+    st.line_chart(data=sessions, x="index" y="length")
+def most_played():
+    sessions = st.session_state.sessions_df
+    top_10 = pd.sessions.head(10)
+    st.bar_chart(top_10, x="")
+"""
 
 
 
@@ -154,6 +199,9 @@ render_stopwatch_display()
 render_stopwatch_controls()
 render_add_song_form()
 render_song_list()
-st.button("Save Session", on_click=save_session)
+st.button(
+    "Save Session", on_click=save_session)
+()
 render_history()
 
+#update_dataframe()
